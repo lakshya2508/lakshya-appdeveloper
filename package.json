@@ -1,0 +1,9 @@
+{
+  "name": "hearassist-accessible-companion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Accessible speech captions and visual sound-alert companion portfolio prototype",
+  "scripts": { "start": "vite --host 0.0.0.0", "build": "vite build", "test": "vitest run" },
+  "dependencies": {},
+  "devDependencies": { "vite": "^6.0.0", "vitest": "^2.1.8", "jsdom": "^25.0.1" }
+}
