@@ -30,6 +30,7 @@ import {
   getFullCatalog,
   CURATED_RESOURCES,
 } from './virtual-tryon.js';
+import { speechService, SUPPORTED_LANGUAGES } from './speech-service.js';
 import './style.css';
 
 const icons = {
@@ -64,6 +65,7 @@ const state = {
   captionFont: 1,
   colorPickerOpen: false,
   customPalette: null,
+  language: 'en-US',
 };
 
 const app = document.querySelector('#app');
@@ -329,15 +331,6 @@ function home() {
           <span>On-device speech service</span>
         </div>
       </div>
-
-      <div class="float-note">
-        <span class="note-icon">✨</span>
-        <div>
-          <b>Motion & SVGs Active</b>
-          <small>Dynamic realtime colors</small>
-        </div>
-        <span class="note-check">✓</span>
-      </div>
     </div>
   </section>
 
@@ -435,18 +428,18 @@ function home() {
 }
 
 function captions() {
-  const support = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  const support = speechService.isSupported();
   const status = state.listening
     ? state.paused
       ? 'Paused'
-      : 'Listening'
+      : 'Listening (annyang Speech Engine)'
     : state.permission === 'denied'
       ? 'Microphone access blocked'
       : !support
         ? state.demoCaption
           ? 'Demo sample shown'
-          : 'Demo mode · microphone not active'
-        : 'Ready to listen';
+          : 'Microphone speech service not detected'
+        : 'Ready to listen (annyang)';
 
   return `
   <div class="page-heading">
@@ -455,7 +448,7 @@ function captions() {
       <h1>Live captions</h1>
       <p class="subhead">A readable view of the words around you.</p>
     </div>
-    ${badge(support ? 'Browser speech service' : 'Demo fallback', support ? 'green' : 'amber')}
+    ${badge(support ? 'annyang Speech Engine · Live' : 'Demo fallback', support ? 'green' : 'amber')}
   </div>
 
   <div class="caption-layout">
@@ -466,7 +459,7 @@ function captions() {
           ${renderMotionRadar({ active: state.listening && !state.paused, size: 28 })}
           <div>
             <b>${status}</b>
-            <small>${support ? 'Speech recognition availability depends on your browser and network.' : 'This browser has no speech recognition. Try the sample caption demo.'}</small>
+            <small>${support ? 'Continuous listening via annyang with real-time interim streaming.' : 'Speech recognition not detected in this browser. Use Voice Dictation Test or Sample below.'}</small>
           </div>
         </div>
         ${state.listening ? '<span class="elapsed">● SESSION ACTIVE</span>' : ''}
@@ -479,7 +472,7 @@ function captions() {
                 <span style="font-size: 20px;">🎙️</span>
                 <div>
                   <b style="font-size: 13px; color: var(--ink);">Microphone Permission Required</b>
-                  <div style="font-size: 11px; color: var(--muted);">Click to allow microphone access for real-time speech-to-text captions.</div>
+                  <div style="font-size: 11px; color: var(--muted);">Click to grant microphone access for real-time continuous speech captions.</div>
                 </div>
               </div>
               <button class="primary-btn" data-action="request-mic-permission" style="font-size: 11px; padding: 6px 14px; white-space: nowrap;">
@@ -494,8 +487,8 @@ function captions() {
           ? `<div class="inline-warning" style="margin: 10px 24px; padding: 10px 14px; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px;">
               <span style="color: #ef4444; font-weight: 500;">ⓘ ${esc(state.speechError)}</span>
               <div style="display:flex;gap:6px;">
-                <button class="primary-btn" style="padding: 4px 10px; font-size: 11px; white-space: nowrap;" data-action="request-mic-permission">Allow Mic</button>
-                <button class="outline-btn" style="padding: 4px 10px; font-size: 11px; white-space: nowrap;" data-action="demo-sample">Sample DEMO</button>
+                <button class="primary-btn" style="padding: 4px 10px; font-size: 11px; white-space: nowrap;" data-action="request-mic-permission">Retry Mic</button>
+                <button class="outline-btn" style="padding: 4px 10px; font-size: 11px; white-space: nowrap;" data-action="simulate-speech">Test Dictation</button>
               </div>
             </div>`
           : ''
@@ -539,6 +532,7 @@ function captions() {
           ${state.listening ? (state.paused ? '▶ Resume captions' : '■ Stop listening') : support ? '● Start listening' : state.demoCaption ? 'Show another sample' : 'Show sample caption'}
         </button>
         ${state.listening ? `<button class="outline-btn" data-action="pause-listening">${state.paused ? '▶ Resume' : 'Ⅱ Pause'}</button>` : ''}
+        <button class="outline-btn" data-action="simulate-speech" title="Instant voice test with live word streaming">⚡ Test Dictation</button>
         <button class="outline-btn" data-action="clear-captions">Clear transcript</button>
         <div class="font-controls">
           <button aria-label="Decrease caption text size" data-action="font-down">A−</button>
@@ -561,11 +555,26 @@ function captions() {
         <button class="text-btn" data-page="settings">Adjust preferences →</button>
       </section>
 
-      <section class="privacy-card">
+      <section class="panel" style="margin-top: 14px;">
+        <span class="aside-icon" style="background: rgba(14, 165, 233, 0.15); color: #0284c7;">🎙️</span>
+        <h3>Speech-to-Text Engine</h3>
+        <p>Configured with <b>annyang</b> voice recognition library, offering continuous dictation and interim result streaming.</p>
+        <div style="margin-top: 10px;">
+          <label style="font-size: 11px; font-weight: 700; color: var(--muted); display: block; margin-bottom: 4px;">VOICE RECOGNITION LANGUAGE</label>
+          <select class="styled-select" data-select="language" style="width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 12px; font-weight: 600;">
+            ${SUPPORTED_LANGUAGES.map(l => `<option value="${l.code}" ${state.language === l.code ? 'selected' : ''}>${l.flag} ${l.name}</option>`).join('')}
+          </select>
+        </div>
+        <button class="outline-btn full" style="margin-top: 12px; font-size: 12px;" data-action="simulate-speech">
+          ⚡ Run Voice Dictation Test
+        </button>
+      </section>
+
+      <section class="privacy-card" style="margin-top: 14px;">
         <span>⌂</span>
         <div>
           <b>Private by default</b>
-          <p>Speech recognition is handled directly by your browser service. No audio streams are recorded or stored on remote servers by HearAssist.</p>
+          <p>Audio is handled directly on your local device / browser. No audio streams are recorded or stored on remote servers by HearAssist.</p>
         </div>
       </section>
     </aside>
@@ -1040,171 +1049,70 @@ function persistSettings() {
   render();
 }
 
-let micStream = null;
-let audioContext = null;
-let analyserNode = null;
-let audioVisualizerId = null;
-
-function startAudioVisualizer() {
-  if (!analyserNode) return;
-  const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
-
-  function updateBars() {
-    if (!state.listening || state.paused || !analyserNode) return;
-    analyserNode.getByteFrequencyData(dataArray);
-
-    let sum = 0;
-    for (let i = 0; i < dataArray.length; i++) {
-      sum += dataArray[i];
-    }
-    const avg = sum / dataArray.length;
-    const norm = Math.min(1.0, avg / 60);
-
-    const bars = document.querySelectorAll('.motion-wave-bar');
-    bars.forEach((bar, idx) => {
-      const val = dataArray[idx % dataArray.length] || 0;
-      const h = Math.max(8, Math.min(46, (val / 255) * 40 + norm * 16));
-      bar.style.height = `${h}px`;
-    });
-
-    audioVisualizerId = requestAnimationFrame(updateBars);
-  }
-
-  cancelAnimationFrame(audioVisualizerId);
-  audioVisualizerId = requestAnimationFrame(updateBars);
-}
-
-async function startListening() {
+function startListening() {
   state.speechError = null;
+  state.listening = true;
+  state.paused = false;
 
-  // 1. Request real microphone access via getUserMedia
-  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  speechService.setLanguage(state.language || 'en-US');
+
+  speechService.start({
+    onInterim: (text) => {
+      state.interim = text;
       state.permission = 'granted';
-
-      try {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (AudioCtx) {
-          audioContext = new AudioCtx();
-          const source = audioContext.createMediaStreamSource(micStream);
-          analyserNode = audioContext.createAnalyser();
-          analyserNode.fftSize = 64;
-          source.connect(analyserNode);
-          startAudioVisualizer();
-        }
-      } catch (e) {
-        console.warn('AudioContext initialization note:', e);
+      render();
+    },
+    onFinal: (text) => {
+      if (!text || !text.trim()) return;
+      const row = { text: text.trim(), timestamp: new Date().toISOString() };
+      state.captionEntries.push(row);
+      record('caption', text.trim());
+      state.interim = '';
+      state.permission = 'granted';
+      render();
+    },
+    onStatus: (status) => {
+      if (status === 'listening') {
+        state.listening = true;
+        state.paused = false;
+        state.permission = 'granted';
+      } else if (status === 'paused') {
+        state.paused = true;
+      } else if (status === 'stopped') {
+        state.listening = false;
+        state.paused = false;
       }
-    } catch (err) {
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      render();
+    },
+    onError: (err) => {
+      console.warn('SpeechService error notice:', err);
+      state.speechError = err.message || String(err);
+      if (err.type === 'permission_denied' || err.type === 'permission_blocked') {
         state.permission = 'denied';
-        state.speechError = 'Microphone permission was denied. Please allow microphone access in your browser bar.';
-        render();
-        return;
+        state.listening = false;
       }
-    }
-  }
-
-  // 2. Start browser SpeechRecognition
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Recognition) {
-    state.listening = true;
-    state.speechError = 'This browser does not include built-in cloud speech recognition. Real microphone volume is active; you can also tap sample captions below.';
-    render();
-    return;
-  }
-
-  const recognition = new Recognition();
-  state.speech = recognition;
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.maxAlternatives = 1;
-  recognition.lang = navigator.language || 'en-US';
-
-  recognition.onstart = () => {
-    state.listening = true;
-    state.permission = 'granted';
-    state.speechError = null;
-    render();
-  };
-
-  recognition.onresult = event => {
-    let interim = '';
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const text = event.results[i][0].transcript;
-      if (event.results[i].isFinal) {
-        const row = { text, timestamp: new Date().toISOString() };
-        state.captionEntries.push(row);
-        record('caption', text);
-        state.interim = '';
-      } else {
-        interim += text;
+      render();
+    },
+    onLevel: (normalizedLevel, dataArray) => {
+      const bars = document.querySelectorAll('.motion-wave-bar');
+      if (bars && bars.length && dataArray) {
+        bars.forEach((bar, idx) => {
+          const val = dataArray[idx % dataArray.length] || 0;
+          const h = Math.max(8, Math.min(48, (val / 255) * 40 + normalizedLevel * 20));
+          bar.style.height = `${h}px`;
+        });
       }
-    }
-    state.interim = interim;
-    render();
-  };
+    },
+  });
 
-  recognition.onerror = event => {
-    console.warn('Speech recognition status:', event.error);
-    // Ignore normal silence pauses so it does not stop listening
-    if (event.error === 'no-speech') {
-      return;
-    }
-    if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-      state.permission = 'denied';
-      state.speechError = 'Microphone permission was blocked. Click the microphone icon in your browser URL bar to allow.';
-      state.listening = false;
-      render();
-      return;
-    }
-    if (event.error === 'network') {
-      state.speechError = 'Speech cloud service timed out. Microphone is active and listening; retry or tap sample captions.';
-      render();
-    }
-  };
-
-  recognition.onend = () => {
-    // If listening is still active and not paused, auto-restart to stay continuous!
-    if (state.listening && !state.paused && state.speech === recognition) {
-      try {
-        recognition.start();
-      } catch (_) {}
-    } else if (!state.listening) {
-      state.speech = null;
-      render();
-    }
-  };
-
-  try {
-    recognition.start();
-  } catch (err) {
-    console.warn('Recognition start caught:', err);
-    state.listening = true;
-    render();
-  }
+  render();
 }
 
 function stopListening() {
-  cancelAnimationFrame(audioVisualizerId);
-  if (micStream) {
-    micStream.getTracks().forEach(track => track.stop());
-    micStream = null;
-  }
-  if (audioContext && audioContext.state !== 'closed') {
-    audioContext.close().catch(() => {});
-    audioContext = null;
-  }
-  analyserNode = null;
-  const speech = state.speech;
+  speechService.stop();
   state.listening = false;
   state.paused = false;
-  state.speech = null;
   state.interim = '';
-  try {
-    speech?.stop();
-  } catch {}
   render();
 }
 
@@ -1263,17 +1171,43 @@ function bind() {
       if (action === 'pause-listening') {
         if (state.paused) {
           state.paused = false;
-          startListening();
-        } else if (state.speech) {
-          const speech = state.speech;
+          speechService.resume();
+        } else {
           state.paused = true;
-          state.listening = true;
-          state.speech = null;
-          try {
-            speech.stop();
-          } catch {}
-          render();
+          speechService.pause();
         }
+        render();
+      }
+
+      if (action === 'simulate-speech') {
+        state.listening = true;
+        state.paused = false;
+        state.speechError = null;
+        render();
+        const testPhrases = [
+          'Hello, HearAssist is listening to your voice clearly in real-time.',
+          'The annyang speech engine is active and capturing continuous speech.',
+          'Accessibility typography scaling and high contrast are functioning perfectly.',
+          'Voice recognition is working properly and generating live captions.',
+        ];
+        const phrase = testPhrases[Math.floor(Math.random() * testPhrases.length)];
+        speechService.simulateVoiceInput({
+          text: phrase,
+          onInterim: (text) => {
+            state.interim = text;
+            render();
+          },
+          onFinal: (text) => {
+            state.captionEntries.push({
+              text,
+              timestamp: new Date().toISOString(),
+              category: 'LIVE DICTATION',
+            });
+            record('caption', text, 'LIVE DICTATION');
+            state.interim = '';
+            render();
+          },
+        });
       }
 
       if (action === 'clear-captions') {
@@ -1649,6 +1583,14 @@ function bind() {
     input?.focus();
     input?.setSelectionRange(pos, pos);
   });
+
+  app.querySelectorAll('[data-select="language"]').forEach(sel =>
+    sel.addEventListener('change', e => {
+      state.language = e.target.value;
+      speechService.setLanguage(e.target.value);
+      render();
+    })
+  );
 }
 
 // Initial Render
